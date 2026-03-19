@@ -13,7 +13,7 @@ type Player = {
 class Game {
   private session: string = uuidv4();
   static maxPlayers: number = 3;
-  static difficultyLevels: Record<string, number> = {
+  static difficultyLevels: Record<string, GameDifficultly> = {
     0: 1,
     2000: 2,
     3000: 3,
@@ -21,11 +21,11 @@ class Game {
     5000: 5,
   };
 
-  private state: GameState = "lobby";
+  #state: GameState = "lobby";
   private players: Player[] = [];
 
-  host: Player;
-  difficulty: GameDifficultly;
+  readonly host: Player;
+  readonly difficulty: GameDifficultly;
 
   // Returns difficulty setting by player rank
   static difficultyByRank = (rank: number): GameDifficultly => {
@@ -35,7 +35,7 @@ class Game {
   };
 
   // Add player to the session if there is space, and their rank is acceptable
-  addPlayer(player: Player): Boolean {
+  addPlayer(player: Player): boolean {
     if (
       this.players.length < Game.maxPlayers &&
       Game.difficultyByRank(player.rank) === this.difficulty
@@ -47,23 +47,34 @@ class Game {
     return false;
   }
 
+  // Identifies elgible players from a given pool and adds them to the game session
+  // 0(1) approach to iteration, no mutation
   matchNextAvailablePlayers(pool: Player[]) {
     console.log(`Matching elgible players to join session...`);
-    while (this.players.length < Game.maxPlayers && pool.length > 0) {
-      const added = this.addPlayer(pool[0]);
-      pool.shift();
+    let i = 0;
+    while (this.players.length < Game.maxPlayers && i < pool.length) {
+      const added = this.addPlayer(pool[i]);
+      i++;
       if (added) {
         console.log(
           `Players joined (${this.players.length}/${Game.maxPlayers})`,
         );
       }
     }
-    if (this.players.length === Game.maxPlayers) this.state === "ready";
+    if (this.players.length === Game.maxPlayers) this.#state = "ready";
+  }
+
+  set state(newState: GameState) {
+    this.#state = newState;
+    if (newState === "started")
+      console.log(
+        `Starting game session #${this.session} with ${this.players.length} players, difficulty ${this.difficulty}`,
+      );
   }
 
   get gameState() {
     return {
-      state: this.state,
+      state: this.#state,
       difficulty: this.difficulty,
       players: this.players,
     };
@@ -79,15 +90,15 @@ class Game {
   }
 }
 
+// Create a random pool of players
 const getPlayerPool = (): Player[] => {
-  const pool = [];
-  Array.from(Array(Math.floor(Math.random() * 50))).forEach((x, i) => {
-    pool.push({
-      id: uuidv4(),
-      name: uuidv4(),
-      rank: Math.floor(Math.random() * 10000),
-    });
-  });
+  const count = Math.random() * 50;
+  const pool = Array.from({ length: count }, () => ({
+    id: uuidv4(),
+    name: uuidv4(),
+    rank: Math.floor(Math.random() * 10000),
+  }));
+  console.log(`Got latest available player pool`);
   return pool;
 };
 
@@ -100,7 +111,13 @@ const playerSelf: Player = {
 
 // Create a new game as the host
 const session = new Game(playerSelf);
-const playerPool = getPlayerPool();
-session.matchNextAvailablePlayers(playerPool);
+
+// Wait until game is ready
+while (session.gameState.state === "lobby") {
+  const playerPool = getPlayerPool();
+  session.matchNextAvailablePlayers(playerPool);
+}
+
+session.state = "started";
 
 console.log(session.gameState);
